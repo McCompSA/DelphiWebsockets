@@ -1,33 +1,27 @@
 unit IdServerWebsocketHandling;
+
 interface
-{$I wsdefines.pas}
+
 uses
-  Classes, StrUtils, SysUtils, DateUtils
-  , IdCoderMIME
-  , IdThread
-  , IdContext
-  , IdCustomHTTPServer
+  IdContext, IdCustomHTTPServer,
   {$IF CompilerVersion <= 21.0}  //D2010
-  , IdHashSHA1
+  IdHashSHA1,
   {$else}
-  , IdHashSHA                     //XE3 etc
+  IdHashSHA,                     //XE3 etc
   {$IFEND}
-  , IdServerSocketIOHandling
-  //
-  , IdSocketIOHandling
-  , IdServerBaseHandling
-  , IdServerWebsocketContext
-  , IdIOHandlerWebsocket
-  ;
+  IdServerSocketIOHandling, IdServerWebsocketContext,
+  Classes, IdServerBaseHandling, IdIOHandlerWebsocket, IdSocketIOHandling;
 
 type
   TIdServerSocketIOHandling_Ext = class(TIdServerSocketIOHandling)
   end;
 
+  TIdCustomHTTPServer_Ext = class(TIdCustomHTTPServer);
+
   TIdServerWebsocketHandling = class(TIdServerBaseHandling)
   protected
     class procedure DoWSExecute(AThread: TIdContext; aSocketIOHandler: TIdServerSocketIOHandling_Ext);virtual;
-    class procedure HandleWSMessage(AContext: TIdServerWSContext; var aType: TWSDataType;
+    class procedure HandleWSMessage(AContext: TIdServerWSContext; aType: TWSDataType;
                                     aRequestStrm, aResponseStrm: TMemoryStream;
                                     aSocketIOHandler: TIdServerSocketIOHandling_Ext);virtual;
   public
@@ -38,6 +32,10 @@ type
   end;
 
 implementation
+
+uses
+  StrUtils, SysUtils, DateUtils,
+  IdCustomTCPServer, IdCoderMIME, IdThread;
 
 { TIdServerWebsocketHandling }
 
@@ -65,10 +63,10 @@ begin
   try
     context := AThread as TIdServerWSContext;
     //todo: make seperate function + do it after first real write (not header!)
-    if context.IOHandler.BusyUpgrading then
+    if context.WebsocketImpl.BusyUpgrading then
     begin
-      context.IOHandler.IsWebsocket   := True;
-      context.IOHandler.BusyUpgrading := False;
+      context.WebsocketImpl.IsWebsocket   := True;
+      context.WebsocketImpl.BusyUpgrading := False;
     end;
     //initial connect
     if context.IsSocketIO then
@@ -83,10 +81,13 @@ begin
 
     while AThread.Connection.Connected do
     begin
-      if context.IOHandler.HasData or
+      if context.WebsocketImpl.HasData or
         (AThread.Connection.IOHandler.InputBuffer.Size > 0) or
          AThread.Connection.IOHandler.Readable(1 * 1000) then     //wait 5s, else ping the client(!)
       begin
+        if not (context.WebsocketImpl.HasData or (context.IOHandler.InputBuffer.Size > 0)) then
+          Continue;
+
         tstart := Now;
 
         strmResponse := TMemoryStream.Create;
@@ -103,24 +104,32 @@ begin
           if wscode in [wdcPing, wdcPong] then
           begin
             if wscode = wdcPing then
-              context.IOHandler.WriteData(nil, wdcPong);
+              context.WebsocketImpl.WriteData(nil, wdcPong);
             Continue;
           end;
 
-          if wscode = wdcText
-             then wstype := wdtText
-             else wstype := wdtBinary;
+          if wscode = wdcText then
+            wstype := wdtText
+          else
+            wstype := wdtBinary;
 
+          try
           HandleWSMessage(context, wstype, strmRequest, strmResponse, aSocketIOHandler);
+          except
+            on E:Exception do
+              TIdCustomHTTPServer_Ext(context.Server as TIdCustomHTTPServer).DoCommandError(context, nil, nil, E);
+          end;
 
           //write result back (of the same type: text or bin)
           if strmResponse.Size > 0 then
           begin
-            if wstype = wdtText
-               then context.IOHandler.Write(strmResponse, wdtText)
-               else context.IOHandler.Write(strmResponse, wdtBinary)
+            if wscode = wdcText then
+              context.WebsocketImpl.Write(strmResponse, wdtText)
+            else
+              context.WebsocketImpl.Write(strmResponse, wdtBinary)
           end
-          else context.IOHandler.WriteData(nil, wdcPing);
+          else
+            context.WebsocketImpl.WriteData(nil, wdcPing);
         finally
           strmRequest.Free;
           strmResponse.Free;
@@ -138,7 +147,7 @@ begin
           aSocketIOHandler.WritePing(context);
         end
         else
-          context.IOHandler.WriteData(nil, wdcPing);
+          context.WebsocketImpl.WriteData(nil, wdcPing);
       end;
 
     end;
@@ -148,12 +157,14 @@ begin
       Assert(aSocketIOHandler <> nil);
       aSocketIOHandler.WriteDisConnect(context);
     end;
-    context.IOHandler.Clear;
+    context.WebsocketImpl.Clear;
     AThread.Data := nil;
   end;
 end;
 
-class procedure TIdServerWebsocketHandling.HandleWSMessage(AContext: TIdServerWSContext; var aType:TWSDataType; aRequestStrm, aResponseStrm: TMemoryStream; aSocketIOHandler: TIdServerSocketIOHandling_Ext);
+class procedure TIdServerWebsocketHandling.HandleWSMessage(AContext: TIdServerWSContext; aType: TWSDataType;
+  aRequestStrm, aResponseStrm: TMemoryStream;
+  aSocketIOHandler: TIdServerSocketIOHandling_Ext);
 begin
   if AContext.IsSocketIO then
   begin
@@ -169,7 +180,6 @@ class function TIdServerWebsocketHandling.ProcessServerCommandGet(
   AThread: TIdServerWSContext; ARequestInfo: TIdHTTPRequestInfo;
   AResponseInfo: TIdHTTPResponseInfo): Boolean;
 var
-  Accept: Boolean;
   sValue, squid: string;
   context: TIdServerWSContext;
   hash: TIdHashSHA1;
@@ -194,7 +204,8 @@ begin
      Sec-WebSocket-Version: 13 *)
 
   //Connection: Upgrade
-  if not ContainsText(ARequestInfo.Connection, 'Upgrade') then   //Firefox uses "keep-alive, Upgrade"
+  if not ( ContainsText(ARequestInfo.Connection, 'Upgrade') or                         //Firefox uses "keep-alive, Upgrade"
+           ContainsText(ARequestInfo.RawHeaders.Values['upgrade'], 'websocket') ) then //"connection" is empty in case of SSL? so check header too
   begin
     //initiele ondersteuning voor socket.io
     if SameText(ARequestInfo.document , '/socket.io/1/') then
@@ -243,13 +254,6 @@ begin
   begin
     Result  := True;  //handled
     context := AThread as TIdServerWSContext;
-
-    if Assigned(Context.OnWebSocketUpgrade) then
-     begin
-        Accept := True;
-        Context.OnWebSocketUpgrade(Context,ARequestInfo,Accept);
-        if not Accept then Abort;
-     end;
 
     //Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
     sValue := ARequestInfo.RawHeaders.Values['sec-websocket-key'];
@@ -332,17 +336,21 @@ begin
       hash.Free;
     end;
     AResponseInfo.CustomHeaders.Values['Sec-WebSocket-Accept'] := sValue;
+    AResponseInfo.CustomHeaders.Values['Keep-alive'] := 'true';
 
     //send same protocol back?
     AResponseInfo.CustomHeaders.Values['Sec-WebSocket-Protocol']   := context.WebSocketProtocol;
+	
     //we do not support extensions yet (gzip deflate compression etc)
     //AResponseInfo.CustomHeaders.Values['Sec-WebSocket-Extensions'] := context.WebSocketExtensions;
     //http://www.lenholgate.com/blog/2011/07/websockets---the-deflate-stream-extension-is-broken-and-badly-designed.html
     //but is could be done using idZlib.pas and DecompressGZipStream etc
+    AResponseInfo.CustomHeaders.Values['sec-websocket-extensions']   := '';
+    context.WebSocketExtensions := '';
 
     //send response back
     context.IOHandler.InputBuffer.Clear;
-    context.IOHandler.BusyUpgrading := True;
+    context.WebsocketImpl.BusyUpgrading := True;
     AResponseInfo.WriteHeader;
 
     //handle all WS communication in seperate loop

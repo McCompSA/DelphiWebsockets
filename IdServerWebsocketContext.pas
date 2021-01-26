@@ -1,22 +1,16 @@
 unit IdServerWebsocketContext;
+
 interface
-{$I wsdefines.pas}
+
 uses
-  Classes, strUtils
-  , IdContext
-  , IdCustomTCPServer
-  , IdCustomHTTPServer
-  //
-  , IdIOHandlerWebsocket
-  , IdServerBaseHandling
-  , IdServerSocketIOHandling
-  ;
+  Classes,
+  IdCustomTCPServer, IdIOHandlerWebsocket,
+  IdServerBaseHandling, IdServerSocketIOHandling, IdContext, IdIOHandlerStack;
 
 type
   TIdServerWSContext = class;
 
-  TWebSocketUpgradeEvent = procedure(const AContext: TIdServerWSContext; ARequestInfo: TIdHTTPRequestInfo; var Accept:boolean) of object;
-  TWebsocketChannelRequest = procedure(const AContext: TIdServerWSContext; var aType:TWSDataType; const strmRequest, strmResponse: TMemoryStream) of object;
+  TWebsocketChannelRequest = procedure(const AContext: TIdServerWSContext; aType: TWSDataType; const strmRequest, strmResponse: TMemoryStream) of object;
 
   TIdServerWSContext = class(TIdServerContext)
   private
@@ -31,12 +25,12 @@ type
     FWebSocketExtensions: string;
     FCookie: string;
     //FSocketIOPingSend: Boolean;
-    fOnWebSocketUpgrade: TWebSocketUpgradeEvent;
     FOnCustomChannelExecute: TWebsocketChannelRequest;
     FSocketIO: TIdServerSocketIOHandling;
     FOnDestroy: TIdContextEvent;
   public
-    function IOHandler: TIdIOHandlerWebsocket;
+    function IOHandler: TIdIOHandlerStack;
+    function WebsocketImpl: TWebsocketImplementationProxy;
   public
     function IsSocketIO: Boolean;
     property SocketIO: TIdServerSocketIOHandling read FSocketIO write FSocketIO;
@@ -57,11 +51,13 @@ type
     property WebSocketVersion   : Integer read FWebSocketVersion write FWebSocketVersion;
     property WebSocketExtensions: string  read FWebSocketExtensions write FWebSocketExtensions;
   public
-    property OnWebSocketUpgrade: TWebsocketUpgradeEvent read FOnWebSocketUpgrade write FOnWebSocketUpgrade;
     property OnCustomChannelExecute: TWebsocketChannelRequest read FOnCustomChannelExecute write FOnCustomChannelExecute;
   end;
 
 implementation
+
+uses
+  StrUtils;
 
 { TIdServerWSContext }
 
@@ -72,15 +68,20 @@ begin
   inherited;
 end;
 
-function TIdServerWSContext.IOHandler: TIdIOHandlerWebsocket;
+function TIdServerWSContext.IOHandler: TIdIOHandlerStack;
 begin
-  Result := Self.Connection.IOHandler as TIdIOHandlerWebsocket;
+  Result := Self.Connection.IOHandler as TIdIOHandlerStack;
 end;
 
 function TIdServerWSContext.IsSocketIO: Boolean;
 begin
   //FDocument	= '/socket.io/1/websocket/13412152'
   Result := StartsText('/socket.io/1/websocket/', FPath);
+end;
+
+function TIdServerWSContext.WebsocketImpl: TWebsocketImplementationProxy;
+begin
+  Result := (IOHandler as IWebsocketFunctions).WebsocketImpl;
 end;
 
 end.

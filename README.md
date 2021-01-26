@@ -1,12 +1,12 @@
-# Not active anymore
-Unfortunately I don't have time to support this project anymore. Also the websocket protocol has changed in the meantime, so it won't work with browser and other modern implementations. 
+# WebSockets for Delphi with proper SSL support 
+This fork aims for providing SSL support for WebSockets component. It's based on original branch "main-SSL-support".
 
-Please take a look at the free (but closed) 3rd party component:
-* http://www.esegece.com/websockets/download
-* http://www.esegece.com/download/sgcWebSockets_free.zip
+There is also another attempt available at https://github.com/chuacw/WebSockets, but as for now it breaks basic HTTP functionality and is not fully backward compatible
+
+Original description below.
 
 # DelphiWebsockets
-Websockets and Socket.io for Delphi
+WebSockets and Socket.io for Delphi
 
 See below for an event driven async example of an socket.io server and client:
 ```delphi
@@ -86,3 +86,4 @@ begin
     end);
 end;
 ```
+
