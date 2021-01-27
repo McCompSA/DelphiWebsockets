@@ -16,20 +16,53 @@ object Form1: TForm1
   object Button1: TButton
     Left = 8
     Top = 8
-    Width = 75
+    Width = 97
     Height = 25
-    Caption = 'Button1'
+    Caption = 'socket.io'
     TabOrder = 0
     OnClick = Button1Click
   end
-  object Button2: TButton
+  object btnWebsocketsTest: TButton
     Left = 8
     Top = 39
-    Width = 75
+    Width = 97
     Height = 25
-    Caption = 'Button2'
+    Caption = 'WebSockets'
     TabOrder = 1
-    OnClick = Button2Click
+    OnClick = btnWebsocketsTestClick
+  end
+  object cbxUseSSL: TCheckBox
+    Left = 24
+    Top = 88
+    Width = 97
+    Height = 17
+    Caption = 'use SSL'
+    TabOrder = 2
+    OnClick = cbxUseSSLClick
+  end
+  object edtCertFilename: TLabeledEdit
+    Left = 24
+    Top = 136
+    Width = 185
+    Height = 21
+    EditLabel.Width = 67
+    EditLabel.Height = 13
+    EditLabel.Caption = 'Cert file name'
+    Enabled = False
+    TabOrder = 3
+    Text = 'd:\mccomp\mccomp.crt'
+  end
+  object edtKeyFilename: TLabeledEdit
+    Left = 24
+    Top = 184
+    Width = 185
+    Height = 21
+    EditLabel.Width = 64
+    EditLabel.Height = 13
+    EditLabel.Caption = 'Key file name'
+    Enabled = False
+    TabOrder = 4
+    Text = 'd:\mccomp\mccomp.key'
   end
   object Timer1: TTimer
     Enabled = False

@@ -87,25 +87,8 @@ begin
 end;
 
 procedure TIdWebsocketServer.DetermineSSLforPort(APort: TIdPort; var VUseSSL: Boolean);
-//var
-//  thread: TIdThreadWithTask;
-//  ctx: TIdServerWSContext;
 begin
   VUseSSL := IOHandler.InheritsFrom(TIdServerIOHandlerSSLBase);
-
-  {$message warn 'todo: no ssl for localhost (testing, server IPC, etc)?'}
-  (*
-  //
-  if TThread.CurrentThread is TIdThreadWithTask then
-  begin
-    thread := TThread.CurrentThread as TIdThreadWithTask;
-    ctx    := thread.Task as TIdServerWSContext;
-    //yarn   := thread.Task.Yarn as TIdYarnOfThread;
-
-    if ctx.Binding.PeerIP = '127.0.0.1' then
-      VUseSSL := false;
-  end;
-  *)
 end;
 
 procedure TIdWebsocketServer.DoCommandGet(AContext: TIdContext;
@@ -138,7 +121,7 @@ begin
         //  SSLOptions.CertFile := 'your_cert.cer';
         //  SSLOptions.KeyFile := 'key.pem';
 
-        SSLOptions.Method := sslvSSLv23;
+        SSLOptions.Method := sslvTLSv1_2;
         SSLOptions.Mode   := sslmServer;
 
         OnQuerySSLPort := DetermineSSLforPort;

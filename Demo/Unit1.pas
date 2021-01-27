@@ -11,10 +11,14 @@ type
   TForm1 = class(TForm)
     Button1: TButton;
     Timer1: TTimer;
-    Button2: TButton;
+    btnWebsocketsTest: TButton;
+    cbxUseSSL: TCheckBox;
+    edtCertFilename: TLabeledEdit;
+    edtKeyFilename: TLabeledEdit;
     procedure Button1Click(Sender: TObject);
     procedure Timer1Timer(Sender: TObject);
-    procedure Button2Click(Sender: TObject);
+    procedure btnWebsocketsTestClick(Sender: TObject);
+    procedure cbxUseSSLClick(Sender: TObject);
   private
     procedure ServerMessageTextReceived(const AContext: TIdServerWSContext; const aText: string);
     procedure ClientBinDataReceived(const aData: TStream);
@@ -30,7 +34,9 @@ implementation
 
 uses
   IdWebsocketServer, IdHTTPWebsocketClient, superobject, IdSocketIOHandling,
-  IdIOHandlerWebsocket;
+  IdIOHandlerWebsocket,
+  IdSSLOpenSSL,
+  IdServerIOHandlerWebsocket;
 
 var
   server: TIdWebsocketServer;
@@ -90,15 +96,37 @@ begin
 //  Timer1.Enabled  := True;
 end;
 
-procedure TForm1.Button2Click(Sender: TObject);
+procedure TForm1.cbxUseSSLClick(Sender: TObject);
+begin
+  edtCertFilename.Enabled := cbxUseSSL.Checked;
+  edtKeyFilename.Enabled := cbxUseSSL.Checked;
+end;
+
+procedure TForm1.btnWebsocketsTestClick(Sender: TObject);
 begin
   server := TIdWebsocketServer.Create(Self);
   server.DefaultPort := 12346;
+  if cbxUseSSL.Checked then
+  begin
+    server.UseSSL := true;
+    with server.IOHandler as TIdServerIOHandlerWebsocketSSL do
+    begin
+      SSLOptions.Method := sslvTLSv1_2;
+      SSLOptions.KeyFile := edtKeyFilename.Text;
+      SSLOptions.CertFile := edtCertFilename.Text;
+      SSLOptions.RootCertFile := '';
+    end;
+  end
+  else
+    server.IOHandler;
   server.Active      := True;
 
   client := TIdHTTPWebsocketClient.Create(Self);
   client.Port := 12346;
   client.Host := 'localhost';
+  client.UseSSL := cbxUseSSL.Checked;
+  if cbxUseSSL.Checked then
+    (client.IOHandler as TIdIOHandlerWebsocketSSL).SSLOptions.Method := sslvTLSv1_2;
   client.Connect;
   client.UpgradeToWebsocket;
 
@@ -118,7 +146,7 @@ var
 begin
   ShowMessageInMainthread('WS REQUEST: ' + aText);
   strm := TStringStream.Create('SERVER: ' + aText);
-  AContext.IOHandler.Write(strm, wdtBinary);
+  AContext.IOHandler.Write(strm);
 end;
 
 procedure TForm1.Timer1Timer(Sender: TObject);

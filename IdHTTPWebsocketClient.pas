@@ -466,7 +466,8 @@ begin
       if UseSSL then
         sURL := Format('https://%s:%d/socket.io/1/', [Host, Port])
       else
-      sURL := Format('http://%s:%d/socket.io/1/', [Host, Port]);
+        sURL := Format('http://%s:%d/socket.io/1/', [Host, Port]);
+
       strmResponse.Clear;
 
       ReadTimeout := 5 * 1000;
@@ -541,9 +542,11 @@ begin
     if UseSSL then
       sURL := Format('https://%s:%d/%s', [Host, Port, WSResourceName])
     else
-    sURL := Format('http://%s:%d/%s', [Host, Port, WSResourceName]);
+      sURL := Format('http://%s:%d/%s', [Host, Port, WSResourceName]);
 
     ReadTimeout := Max(5 * 1000, ReadTimeout);
+    if DebugHook > 0 then
+      ReadTimeout := ReadTimeout * 10;
 
     { example:
     GET http://localhost:9222/devtools/page/642D7227-148E-47C2-B97A-E00850E3AFA3 HTTP/1.1
